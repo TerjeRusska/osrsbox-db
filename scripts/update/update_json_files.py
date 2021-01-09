@@ -30,6 +30,9 @@ from osrsbox import items_api
 from osrsbox import monsters_api
 from osrsbox import prayers_api
 
+import requests
+from bs4 import BeautifulSoup
+
 
 def generate_items_complete():
     """Generate the `docs/items-complete.json` file."""
@@ -156,6 +159,104 @@ def generate_items_search_file():
         json.dump(items_search, f, indent=4)
 
 
+def generate_item_drop_table_file():
+    """Generate the `docs/item-drop-table.json` file."""
+    # Read in the item database content
+    path_to_items_json = Path(config.DOCS_PATH / "items-json")
+    all_db_items = items_api.all_items.AllItems(path_to_items_json)
+
+    # Read in the monster database content
+    path_to_monsters_json = Path(config.DOCS_PATH / "monsters-json")
+    all_db_monsters = monsters_api.all_monsters.AllMonsters(path_to_monsters_json)
+
+    drop_tables = dict()
+    drop_tables["items"] = []
+
+    images_dict = dict()
+
+    for item in all_db_items:
+
+        if item.quest_item or item.duplicate:
+            continue
+
+        # Make a temporary dictionary for each item
+        temp_dict = dict()
+        unique_monsters = []
+
+        # Add id, name, type and duplicate status
+        temp_dict["id"] = item.id
+        temp_dict["name"] = item.name
+        temp_dict["members"] = item.members
+        temp_dict["lowalch"] = item.lowalch
+        temp_dict["highalch"] = item.highalch
+        temp_dict["examine"] = item.examine
+        temp_dict["monsters"] = []
+
+        for monster in all_db_monsters:
+            if (str(monster.combat_level) + monster.name) in unique_monsters:
+                continue
+
+            unique_monsters.append(str(monster.combat_level) + monster.name)
+            unique_drops = []
+
+            temp_dict_monster = dict()
+
+            temp_dict_monster["id"] = monster.id
+            temp_dict_monster["name"] = monster.name
+            temp_dict_monster["members"] = monster.members
+            temp_dict_monster["combat_level"] = monster.combat_level
+            temp_dict_monster["wiki_url"] = monster.wiki_url
+
+            temp_dict_monster["drops"] = []
+
+            monster_drops = monster.drops
+            for drop in monster_drops:
+                if (str(drop.id)+str(drop.quantity)) in unique_drops:
+                    continue
+                if drop.id == item.id:
+                    temp_dict_drop = dict()
+
+                    temp_dict_drop["quantity"] = drop.quantity
+                    temp_dict_drop["rarity"] = drop.rarity
+
+                    temp_dict_monster["drops"].append(temp_dict_drop)
+                    unique_drops.append(str(drop.id)+str(drop.quantity))
+
+            if temp_dict_monster["drops"]:
+                if (str(monster.combat_level) + monster.name) not in images_dict or images_dict[(str(monster.combat_level) + monster.name)] == "":
+                    try:
+                        images_dict[(str(monster.combat_level) + monster.name)] = ""
+                        temp_dict_monster["image"] = ""
+                        url = monster.wiki_url
+                        response = requests.get(url)
+                        soup = BeautifulSoup(response.text)
+
+                        metas = soup.find_all('meta')
+                        for meta in metas:
+                            if 'property' in meta.attrs and meta.attrs['property'] == "og:image":
+                                temp_dict_monster["image"] = meta.attrs['content']
+                                images_dict[(str(monster.combat_level) + monster.name)] = meta.attrs['content']
+                    except:
+                        print("exception", (str(monster.combat_level) + monster.name))
+                        images_dict[(str(monster.combat_level) + monster.name)] = ""
+                        temp_dict_monster["image"] = ""
+                else:
+                    temp_dict_monster["image"] = images_dict[(str(monster.combat_level) + monster.name)]
+
+                print(images_dict[(str(monster.combat_level) + monster.name)], (str(monster.combat_level) + monster.name))
+                temp_dict["monsters"].append(temp_dict_monster)
+
+        if temp_dict["monsters"]:
+            # Add temp_dict to all items
+            print(temp_dict["name"])
+            drop_tables["items"].append(temp_dict)
+
+    # Save search file to docs/items_complete.json
+    out_fi = Path(config.DOCS_PATH / "item-drop-table.json")
+    with open(out_fi, "w") as f:
+        json.dump(drop_tables, f, indent=4)
+
+
 def main():
     """The main function for generating the static JSON files."""
     print("Generating items-complete.json file...")
@@ -168,6 +269,8 @@ def main():
     generate_prayers_complete()
     print("Generating items-search.json file...")
     generate_items_search_file()
+
+    #generate_item_drop_table_file()
 
 
 if __name__ == '__main__':
