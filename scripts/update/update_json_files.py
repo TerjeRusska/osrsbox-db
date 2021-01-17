@@ -231,11 +231,17 @@ def generate_item_drop_table_file():
                         response = requests.get(url)
                         soup = BeautifulSoup(response.text)
 
-                        metas = soup.find_all('meta')
-                        for meta in metas:
-                            if 'property' in meta.attrs and meta.attrs['property'] == "og:image":
-                                temp_dict_monster["image"] = meta.attrs['content']
-                                images_dict[(str(monster.combat_level) + monster.name)] = meta.attrs['content']
+                        try:
+                            infobox = soup.findAll(class_="infobox-image infobox-full-width-content")[0]
+                            mobImg = infobox.findAll('img')[0].attrs['src']
+                            temp_dict_monster["image"] = "https://oldschool.runescape.wiki" + mobImg
+                            images_dict[(str(monster.combat_level) + monster.name)] = "https://oldschool.runescape.wiki" + mobImg
+                        except:
+                            metas = soup.find_all('meta')
+                            for meta in metas:
+                                if 'property' in meta.attrs and meta.attrs['property'] == "og:image":
+                                    temp_dict_monster["image"] = meta.attrs['content']
+                                    images_dict[(str(monster.combat_level) + monster.name)] = meta.attrs['content']
                     except:
                         print("exception", (str(monster.combat_level) + monster.name))
                         images_dict[(str(monster.combat_level) + monster.name)] = ""
